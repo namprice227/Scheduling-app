@@ -14,24 +14,25 @@ AI-first Android companion that learns your weekly routine, auto-schedules worko
 Scheduling-app/
 ├── README.md                # Beginner-friendly overview, AI workflow, and setup steps
 ├── docs/
-│   ├── architecture.md      # Explanation of AI pipeline, clean architecture layers, and data flows
+│   ├── architecture.md      # Detailed explanation of AI pipeline, clean architecture layers, and data flows
 │   ├── prompts.md           # Prompt templates + guardrails for natural-language scheduling input
 │   └── ux/
 │       ├── personas.md      # Target users, their routines, and AI expectations
 │       └── flows.md         # Onboarding, AI-setup interview, gym nudges, stand-up reminders, focus timer
 ├── app/
-│   ├── build.gradle.kts     # Android module configuration (Jetpack Compose, coroutines, etc.)
+│   ├── build.gradle.kts     # Android module configuration (Jetpack Compose, Hilt, WorkManager, etc.)
 │   └── src/
 │       ├── main/
 │       │   ├── AndroidManifest.xml
 │       │   ├── java/
 │       │   │   └── com/example/scheduler/
 │       │   │       ├── ai/             # LLM request models, parser/validator, travel-time estimator
-│       │   │       ├── data/           # Repositories, entities, Room (future)
+│       │   │       ├── data/           # Room entities, DAOs, repositories (tasks, routines, reminders)
 │       │   │       ├── domain/         # Use cases (AI setup interview, gym recommender, stand-up coach, focus mode)
 │       │   │       └── presentation/   # Compose screens, navigation, ViewModels, timers
 │       │   └── res/
-│       │       └── values/strings.xml
+│       │       ├── values/strings.xml
+│       │       └── drawable/
 │       └── test/                       # Unit tests (domain + ViewModel)
 ├── backend/
 │   ├── api/                            # Optional cloud endpoints (sync, AI inference fallback)
@@ -45,23 +46,18 @@ Scheduling-app/
 | Layer | Technology choices | Purpose |
 | --- | --- | --- |
 | UI | **Kotlin**, **Jetpack Compose**, **Material 3**, **Navigation Compose** | Declarative UI, adaptive layouts, guided flows, focus timer screen |
-| Presentation | **Android ViewModel**, **StateFlow/Coroutines** | State management, lifecycle-aware logic |
+| Presentation | **Android ViewModel**, **StateFlow/Coroutines**, **Hilt (DI)** | State management, lifecycle-aware logic, dependency injection |
 | Domain | Plain Kotlin modules with use cases & sealed models | Encapsulate AI interview logic, gym planning, movement reminders |
-| Data | In-memory repository (prototype) → **Room**, **DataStore**, **WorkManager** | Offline-first storage, preference handling, background sync |
-| AI & NLP | `NaturalLanguagePlanner` fallback today → **OpenAI / Azure OpenAI LLM API**, optional **Google Distance Matrix** | Parse free-form schedules, validate intent, estimate travel time |
-| Testing | **JUnit4/5**, **Turbine**, **Compose UI Test**, **Detekt/ktlint** | Unit, flow, and UI tests + static analysis |
-| Tooling | **Gradle (KTS)**, **GitHub Actions**, **Play Console** | Build, CI/CD, linting, release management |
+| Data | **Room**, **DataStore**, **WorkManager**, optional **Firebase/REST** sync | Offline-first storage, preference handling, background sync |
+| AI & NLP | **OpenAI / Azure OpenAI LLM API**, **prompt templates**, lightweight **on-device classifiers**, optional **Google Distance Matrix** | Parse free-form schedules, validate intent, estimate travel time |
+| Testing | **JUnit5**, **Turbine**, **MockK**, **Compose UI Test**, **Detekt/ktlint** | Unit, flow, and UI tests + static analysis |
+| Tooling | **Gradle (KTS)**, **GitHub Actions**, **Ktlint/Detekt**, **Play Console** | Build, CI/CD, linting, release management |
 
-## 🧩 Prototype status
-- ✅ **Composable UI** for setup input, schedule list, gym suggestion card, movement reminders, and focus timer is live in `SchedulerApp`.
-- ✅ **ViewModel + use cases** power deterministic AI-like behaviors (parsing, gym suggestions, stand-up nudges, timer logic).
-- ⚙️ **Persistence and real AI calls** are stubbed with in-memory repositories and deterministic parsers so the flows are demoable offline.
-
-## 🚀 Run the Android demo
-1. Install Android Studio (Giraffe+) with SDK 34 and the Compose toolkit.
-2. Clone this repo and open it in Android Studio.
-3. Create a `local.properties` with your SDK path (e.g., `sdk.dir=/Users/me/Library/Android/sdk`).
-4. Run `./gradlew :app:assembleDebug` or use *Run ▶️ app* in Android Studio to launch the Compose preview on an emulator/device.
+## 🚀 Getting started (future work)
+1. Install Android Studio (Giraffe+) with latest SDK + Compose tooling.
+2. Set up an OpenAI or Azure OpenAI key and store it in `local.properties`.
+3. Run `./gradlew assembleDebug` to build once modules are scaffolded.
+4. Use the mock data seeding script in `tools/scripts/seed_routines.kt` (to be implemented) to populate initial schedules.
 
 ## 🔐 Privacy & safety principles
 - Transparent consent during AI onboarding; users can opt out of cloud inference.
@@ -73,7 +69,5 @@ Scheduling-app/
 - Instrumented UI tests covering onboarding chat, task entry, and focus timer.
 - Prompt regression suite to ensure AI responses remain deterministic for given inputs.
 
-## 🗺️ Next steps
-1. Swap the in-memory repository for Room entities + DAO.
-2. Integrate a hosted LLM endpoint (OpenAI/Azure) behind `NaturalLanguagePlanner`.
-3. Add WorkManager jobs and notifications so stand-up/gym reminders work even when the app is closed.
+---
+This README sets expectations and guides future contributors before any code is written. Once the structure and documentation are accepted, implementation work can begin.
