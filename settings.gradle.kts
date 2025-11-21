@@ -8,3 +8,4 @@ pluginManagement {
 
 rootProject.name = "Scheduling-app"
 include(":app")
+include(":backend:api")
