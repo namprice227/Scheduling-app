@@ -18,17 +18,23 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import java.time.DayOfWeek
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -37,6 +43,7 @@ import java.util.Locale
 fun SchedulerApp(viewModel: SchedulerViewModel = viewModel()) {
     val state by viewModel.uiState.collectAsState()
     val formatter = DateTimeFormatter.ofPattern("h:mm a")
+    var selectedTab by rememberSaveable { mutableStateOf(SchedulerTab.ThisWeek) }
 
     LaunchedEffect(Unit) {
         viewModel.evaluateMovement()
@@ -52,114 +59,208 @@ fun SchedulerApp(viewModel: SchedulerViewModel = viewModel()) {
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                item {
-                    Text(
-                        "Setup your week",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = state.userInput,
-                        onValueChange = viewModel::onUserInputChanged,
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Describe Monday plan…") },
-                        supportingText = {
-                            Text("e.g. Monday classes 8-11am, travel 20m")
-                        }
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Button(onClick = viewModel::onSubmitSchedule) {
-                        Text("Add to planner")
-                    }
-                    state.parsingError?.let {
-                        Text(it, color = MaterialTheme.colorScheme.error)
-                    }
-                }
-
-                if (state.scheduleEntries.isNotEmpty()) {
-                    item {
-                        Text(
-                            "Your schedule",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+            Column(modifier = Modifier.fillMaxSize()) {
+                TabRow(selectedTabIndex = selectedTab.ordinal) {
+                    SchedulerTab.entries.forEach { tab ->
+                        Tab(
+                            selected = selectedTab == tab,
+                            onClick = { selectedTab = tab },
+                            text = { Text(tab.label) }
                         )
                     }
-                    items(state.scheduleEntries) { entry ->
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(16.dp)) {
-                                Text(entry.title, fontWeight = FontWeight.Bold)
-                                val dayLabel = entry.dayOfWeek.name.lowercase(Locale.getDefault())
-                                    .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
-                                Text("$dayLabel ${entry.startTime.format(formatter)} - ${entry.endTime.format(formatter)}")
-                                entry.location?.let { Text(it) }
-                            }
+                }
+
+                when (selectedTab) {
+                    SchedulerTab.ThisWeek -> PlannerTabContent(viewModel, state, formatter)
+                    SchedulerTab.NextWeek -> WeeklyScheduleTab(state, formatter)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlannerTabContent(
+    viewModel: SchedulerViewModel,
+    state: SchedulerViewModel.UiState,
+    formatter: DateTimeFormatter
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Text(
+                "Setup your week",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = state.userInput,
+                onValueChange = viewModel::onUserInputChanged,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Describe Monday plan…") },
+                supportingText = {
+                    Text("e.g. Monday classes 8-11am, travel 20m")
+                }
+            )
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = viewModel::onSubmitSchedule) {
+                Text("Add to planner")
+            }
+            state.parsingError?.let {
+                Text(it, color = MaterialTheme.colorScheme.error)
+            }
+        }
+
+        if (state.scheduleEntries.isNotEmpty()) {
+            item {
+                Text(
+                    "Your schedule",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            items(state.scheduleEntries) { entry ->
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(entry.title, fontWeight = FontWeight.Bold)
+                        val dayLabel = entry.dayOfWeek.name.lowercase(Locale.getDefault())
+                            .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+                        Text("$dayLabel ${entry.startTime.format(formatter)} - ${entry.endTime.format(formatter)}")
+                        entry.location?.let { Text(it) }
+                    }
+                }
+            }
+        }
+
+        state.gymRecommendation?.let { recommendation ->
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Suggested gym session", fontWeight = FontWeight.Bold)
+                        val day = recommendation.dayOfWeek.name.lowercase(Locale.getDefault())
+                            .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+                        Text("$day ${recommendation.startTime.format(formatter)}")
+                        Text("Includes ${recommendation.travelBufferMinutes} min travel buffer")
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Movement reminders", fontWeight = FontWeight.Bold)
+                    Text(state.movementNudge?.message ?: "You're all caught up. We'll remind you after 45 min of sitting.")
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(onClick = viewModel::evaluateMovement) {
+                            Text("Check now")
+                        }
+                        OutlinedButton(onClick = viewModel::markMovement) {
+                            Text("I moved")
                         }
                     }
                 }
+            }
+        }
 
-                state.gymRecommendation?.let { recommendation ->
-                    item {
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(16.dp)) {
-                                Text("Suggested gym session", fontWeight = FontWeight.Bold)
-                                val day = recommendation.dayOfWeek.name.lowercase(Locale.getDefault())
-                                    .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
-                                Text("$day ${recommendation.startTime.format(formatter)}")
-                                Text("Includes ${recommendation.travelBufferMinutes} min travel buffer")
-                            }
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("Focus mode", fontWeight = FontWeight.Bold)
+                    Text(viewModel.formatDuration(state.focusTimer.remainingSeconds))
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(onClick = { viewModel.startFocusTimer(state.focusTimer.targetMinutes) }) {
+                            Text(if (state.focusTimer.isRunning) "Running" else "Start ${state.focusTimer.targetMinutes}m")
+                        }
+                        OutlinedButton(onClick = viewModel::stopFocusTimer) {
+                            Text("Stop")
                         }
                     }
+                    Text("Completed sessions: ${state.focusTimer.completedSessions}")
                 }
+            }
+        }
+    }
+}
 
-                item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text("Movement reminders", fontWeight = FontWeight.Bold)
-                            Text(state.movementNudge?.message ?: "You're all caught up. We'll remind you after 45 min of sitting.")
-                            Spacer(Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Button(onClick = viewModel::evaluateMovement) {
-                                    Text("Check now")
-                                }
-                                OutlinedButton(onClick = viewModel::markMovement) {
-                                    Text("I moved")
-                                }
-                            }
-                        }
-                    }
-                }
+@Composable
+private fun WeeklyScheduleTab(
+    state: SchedulerViewModel.UiState,
+    formatter: DateTimeFormatter
+) {
+    val dayOrder = listOf(
+        DayOfWeek.MONDAY,
+        DayOfWeek.TUESDAY,
+        DayOfWeek.WEDNESDAY,
+        DayOfWeek.THURSDAY,
+        DayOfWeek.FRIDAY,
+        DayOfWeek.SATURDAY,
+        DayOfWeek.SUNDAY
+    )
+    val entriesByDay = state.scheduleEntries.groupBy { it.dayOfWeek }
 
-                item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text("Focus mode", fontWeight = FontWeight.Bold)
-                            Text(viewModel.formatDuration(state.focusTimer.remainingSeconds))
-                            Spacer(Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Button(onClick = { viewModel.startFocusTimer(state.focusTimer.targetMinutes) }) {
-                                    Text(if (state.focusTimer.isRunning) "Running" else "Start ${state.focusTimer.targetMinutes}m")
-                                }
-                                OutlinedButton(onClick = viewModel::stopFocusTimer) {
-                                    Text("Stop")
-                                }
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text(
+                "Next week at a glance",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text("Swipe through each day from Monday to Sunday to see what's coming up.")
+            Spacer(Modifier.height(8.dp))
+        }
+
+        items(dayOrder) { day ->
+            val entries = entriesByDay[day]?.sortedBy { it.startTime }.orEmpty()
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val dayLabel = day.name.lowercase(Locale.getDefault())
+                        .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+                    Text(dayLabel, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                    if (entries.isEmpty()) {
+                        Text("No activities scheduled.", style = MaterialTheme.typography.bodyMedium)
+                    } else {
+                        entries.forEach { entry ->
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(entry.title, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "${entry.startTime.format(formatter)} - ${entry.endTime.format(formatter)}",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                entry.location?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                             }
-                            Text("Completed sessions: ${state.focusTimer.completedSessions}")
                         }
                     }
                 }
             }
         }
     }
+}
+
+private enum class SchedulerTab(val label: String) {
+    ThisWeek("Planner"),
+    NextWeek("Next Week")
 }
