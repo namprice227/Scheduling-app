@@ -1,5 +1,6 @@
 package com.example.scheduler.presentation
 
+import android.app.Application
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,6 +27,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -34,7 +36,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SchedulerApp(viewModel: SchedulerViewModel = viewModel()) {
+fun SchedulerApp(viewModel: SchedulerViewModel = viewModel(factory = SchedulerViewModel.provideFactory(LocalContext.current.applicationContext as Application))) {
     val state by viewModel.uiState.collectAsState()
     val formatter = DateTimeFormatter.ofPattern("h:mm a")
 
