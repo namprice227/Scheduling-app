@@ -23,15 +23,16 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class SchedulerViewModel(
-    application: Application,
-    private val repository: ScheduleRepository = ScheduleRepository(
-        ScheduleDatabase.getInstance(application).scheduleDao()
-    ),
-    private val scheduleParser: ScheduleParser = ScheduleParser(),
-    private val gymRecommendationUseCase: GymRecommendationUseCase = GymRecommendationUseCase(),
-    private val standUpReminderUseCase: StandUpReminderUseCase = StandUpReminderUseCase(),
-    private val focusTimerUseCase: FocusTimerUseCase = FocusTimerUseCase()
+    application: Application
 ) : AndroidViewModel(application) {
+
+    private val repository = ScheduleRepository(
+        ScheduleDatabase.getInstance(application).scheduleDao()
+    )
+    private val scheduleParser = ScheduleParser()
+    private val gymRecommendationUseCase = GymRecommendationUseCase()
+    private val standUpReminderUseCase = StandUpReminderUseCase()
+    private val focusTimerUseCase = FocusTimerUseCase()
 
     data class UiState(
         val userInput: String = "",
