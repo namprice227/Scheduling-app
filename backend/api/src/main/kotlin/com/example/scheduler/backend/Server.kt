@@ -12,8 +12,6 @@ import io.ktor.server.plugins.callloging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
-import io.ktor.server.response.respondText
-import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import org.jetbrains.exposed.sql.Database
@@ -47,10 +45,6 @@ private fun Application.configureRouting() {
     }
 
     routing {
-        get("/") {
-            call.respondText("working")
-        }
-
         post("/activities/bulk") {
             val payload = runCatching { call.receive<List<ActivityPayload>>() }
                 .getOrElse {
