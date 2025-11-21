@@ -1,17 +1,36 @@
 package com.example.scheduler.data
 
+import com.example.scheduler.data.local.ScheduleDao
+import com.example.scheduler.data.local.ScheduleEntryEntity
 import com.example.scheduler.data.model.ScheduleEntry
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 
-class ScheduleRepository {
-    private val entries = MutableStateFlow<List<ScheduleEntry>>(emptyList())
+class ScheduleRepository(private val scheduleDao: ScheduleDao) {
 
-    fun entries(): Flow<List<ScheduleEntry>> = entries
+    fun entries(): Flow<List<ScheduleEntry>> =
+        scheduleDao.entries().map { list -> list.map(ScheduleEntryEntity::toDomain) }
 
-    fun addAll(newEntries: List<ScheduleEntry>) {
+    suspend fun addAll(newEntries: List<ScheduleEntry>) {
         if (newEntries.isEmpty()) return
-        entries.value = (entries.value + newEntries)
-            .distinctBy { Triple(it.dayOfWeek, it.startTime, it.title) }
+        scheduleDao.insertAll(newEntries.map(ScheduleEntry::toEntity))
     }
 }
+
+private fun ScheduleEntry.toEntity(): ScheduleEntryEntity = ScheduleEntryEntity(
+    title = title,
+    dayOfWeek = dayOfWeek,
+    startTime = startTime,
+    endTime = endTime,
+    location = location,
+    travelBufferMinutes = travelBufferMinutes
+)
+
+private fun ScheduleEntryEntity.toDomain(): ScheduleEntry = ScheduleEntry(
+    title = title,
+    dayOfWeek = dayOfWeek,
+    startTime = startTime,
+    endTime = endTime,
+    location = location,
+    travelBufferMinutes = travelBufferMinutes
+)

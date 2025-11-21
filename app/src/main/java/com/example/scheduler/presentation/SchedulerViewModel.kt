@@ -1,8 +1,13 @@
 package com.example.scheduler.presentation
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.lifecycle.viewModelScope
 import com.example.scheduler.data.ScheduleRepository
+import com.example.scheduler.data.local.ScheduleDatabase
 import com.example.scheduler.data.model.ScheduleEntry
 import com.example.scheduler.domain.model.FocusTimerState
 import com.example.scheduler.domain.model.GymRecommendation
@@ -21,12 +26,15 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class SchedulerViewModel(
-    private val repository: ScheduleRepository = ScheduleRepository(),
+    application: Application,
+    private val repository: ScheduleRepository = ScheduleRepository(
+        ScheduleDatabase.getInstance(application).scheduleDao()
+    ),
     private val scheduleParser: ScheduleParser = ScheduleParser(),
     private val gymRecommendationUseCase: GymRecommendationUseCase = GymRecommendationUseCase(),
     private val standUpReminderUseCase: StandUpReminderUseCase = StandUpReminderUseCase(),
     private val focusTimerUseCase: FocusTimerUseCase = FocusTimerUseCase()
-) : ViewModel() {
+) : AndroidViewModel(application) {
 
     data class UiState(
         val userInput: String = "",
@@ -66,8 +74,10 @@ class SchedulerViewModel(
             _uiState.update { it.copy(parsingError = "I couldn't understand that. Try adding a day and time.") }
             return
         }
-        repository.addAll(parsed)
-        _uiState.update { it.copy(userInput = "", parsingError = null) }
+        viewModelScope.launch {
+            repository.addAll(parsed)
+            _uiState.update { it.copy(userInput = "", parsingError = null) }
+        }
     }
 
     fun markMovement() {
@@ -104,5 +114,13 @@ class SchedulerViewModel(
         val minutes = TimeUnit.SECONDS.toMinutes(seconds.toLong()).toInt()
         val secs = seconds % 60
         return String.format("%02d:%02d", minutes, secs)
+    }
+
+    companion object {
+        fun provideFactory(application: Application): ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                SchedulerViewModel(application)
+            }
+        }
     }
 }
