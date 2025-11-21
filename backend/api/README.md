@@ -2,12 +2,22 @@
 
 This lightweight Ktor server exposes a single endpoint to bulk-import activities into a local SQLite database.
 
+## Prerequisites
+
+- JDK 17 or newer
+- No external database setup is required; the server creates an `activities.db` SQLite file in the working directory on first run.
+
 ## Running the server
+
+From the repository root:
 
 ```
 ./gradlew :backend:api:run
 ```
-
+```
+./gradlew :backend:api:shadowJar
+java -jar backend/api/build/libs/api-all.jar
+```
 The server listens on `http://localhost:8080` and creates `activities.db` in the working directory.
 
 ## Bulk insert endpoint
