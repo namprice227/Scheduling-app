@@ -2,6 +2,9 @@ package com.example.scheduler.presentation
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.lifecycle.viewModelScope
 import com.example.scheduler.data.ScheduleRepository
 import com.example.scheduler.data.local.ScheduleDatabase
@@ -111,5 +114,13 @@ class SchedulerViewModel(
         val minutes = TimeUnit.SECONDS.toMinutes(seconds.toLong()).toInt()
         val secs = seconds % 60
         return String.format("%02d:%02d", minutes, secs)
+    }
+
+    companion object {
+        fun provideFactory(application: Application): ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                SchedulerViewModel(application)
+            }
+        }
     }
 }
