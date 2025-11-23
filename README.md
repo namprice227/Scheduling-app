@@ -65,6 +65,11 @@ Schedules now save to a local **Room (SQLite) database**, keeping the repository
 3. Run `./gradlew assembleDebug` to build once modules are scaffolded.
 4. Use the mock data seeding script in `tools/scripts/seed_routines.kt` (to be implemented) to populate initial schedules.
 
+### Backend helper during Android builds
+- **Default behavior:** the Gradle task `startBackendForLocalDev` runs before `preBuild` and launches the Ktor backend so the app can send API requests during emulator/local testing.
+- **Skip the backend:** set either `SKIP_BACKEND_FOR_LOCAL_DEV=true` (env var) or `-PskipBackendForLocalDev=true` (Gradle property) when invoking Gradle, e.g. `SKIP_BACKEND_FOR_LOCAL_DEV=true ./gradlew assembleDebug`. Useful when building directly on a device where the server cannot run.
+- **Force it to run:** leave the flags unset (default) or explicitly pass `-PskipBackendForLocalDev=false` to keep the backend auto-start.
+
 ## 🔐 Privacy & safety principles
 - Transparent consent during AI onboarding; users can opt out of cloud inference.
 - Encrypted local storage for personal schedules and health data.
