@@ -57,6 +57,7 @@ android {
 val backendProject = project(":backend:api")
 val backendInstallDir = backendProject.layout.buildDirectory.dir("install/api")
 val backendStartScript = backendInstallDir.map { it.file("bin/api").asFile }
+val backendStartScriptPath = backendStartScript.map { it.absolutePath.replace("\\", "/") }
 
 tasks.register<Exec>("startBackendForLocalDev") {
     group = "application"
@@ -65,18 +66,16 @@ tasks.register<Exec>("startBackendForLocalDev") {
 
     doFirst {
         // The command starts the generated installDist script in the background unless it is already running.
-        commandLine(
-            "bash",
-            "-c",
-            """
+        val startCommand = """
             if pgrep -f 'com.example.scheduler.backend.ServerKt' > /dev/null; then
               echo "Backend API already running on port 8080"
             else
-              nohup "${backendStartScript.get().absolutePath}" >/tmp/backend-api.log 2>&1 &
+              nohup "${backendStartScriptPath.get()}" >/tmp/backend-api.log 2>&1 &
               echo "Started backend API (logs: /tmp/backend-api.log)"
             fi
-            """.trimIndent()
-        )
+        """.trimIndent().replace("\n", " ")
+
+        commandLine("bash", "-lc", startCommand)
     }
 }
 
