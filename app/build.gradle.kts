@@ -58,6 +58,9 @@ val backendProject = project(":backend:api")
 val backendInstallDir = backendProject.layout.buildDirectory.dir("install/api")
 val backendStartScript = backendInstallDir.map { it.file("bin/api").asFile }
 val backendStartScriptPath = backendStartScript.map { it.absolutePath.replace("\\", "/") }
+val skipBackendForLocalDev = providers.gradleProperty("skipBackendForLocalDev")
+    .orElse(providers.environmentVariable("SKIP_BACKEND_FOR_LOCAL_DEV"))
+    .map { it.toBoolean() }
 
 tasks.register<Exec>("startBackendForLocalDev") {
     group = "application"
