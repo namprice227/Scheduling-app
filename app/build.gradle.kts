@@ -72,7 +72,7 @@ tasks.register<Exec>("startBackendForLocalDev") {
             if pgrep -f 'com.example.scheduler.backend.ServerKt' > /dev/null; then
               echo "Backend API already running on port 8080"
             else
-              nohup ${backendStartScript.get().absolutePath} >/tmp/backend-api.log 2>&1 &
+              nohup "${backendStartScript.get().absolutePath}" >/tmp/backend-api.log 2>&1 &
               echo "Started backend API (logs: /tmp/backend-api.log)"
             fi
             """.trimIndent()
