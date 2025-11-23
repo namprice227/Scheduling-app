@@ -1,6 +1,6 @@
 package com.example.scheduler.backend
 
-import io.github.oshai.kotlinlogging.KotlinLogging
+import mu.KotlinLogging
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.jackson.jackson
 import io.ktor.server.application.Application
