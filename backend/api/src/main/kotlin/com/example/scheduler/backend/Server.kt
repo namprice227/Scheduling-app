@@ -1,6 +1,5 @@
 package com.example.scheduler.backend
 
-import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.jackson.jackson
 import io.ktor.server.application.Application
@@ -8,7 +7,6 @@ import io.ktor.server.application.call
 import io.ktor.server.application.install
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
-import io.ktor.server.plugins.callloging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -19,14 +17,12 @@ import java.time.LocalTime
 import java.util.Locale
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.StdOutSqlLogger
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.upperCase
 
-private val logger = KotlinLogging.logger {}
 private val dayRegex = Regex("(?i)(monday|tuesday|wednesday|thursday|friday|saturday|sunday)")
 private val timeRegex = Regex("(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?", RegexOption.IGNORE_CASE)
 private val travelRegex = Regex("travel\\s*(\\d{1,3})\\s*(m|min|minutes)?", RegexOption.IGNORE_CASE)
@@ -153,7 +149,6 @@ private fun toDayOfWeek(raw: String?): DayOfWeek? = raw?.let {
 }
 
 private fun configurePlugins() {
-    install(CallLogging)
     install(ContentNegotiation) {
         jackson()
     }
@@ -163,8 +158,6 @@ private fun configureDatabase() {
     Database.connect("jdbc:sqlite:activities.db", driver = "org.sqlite.JDBC")
     TransactionManager.defaultDatabase?.let { db ->
         transaction(db) {
-            logger.info { "Ensuring activities table exists" }
-            addLogger(StdOutSqlLogger)
             SchemaUtils.create(ActivitiesTable)
         }
     }
