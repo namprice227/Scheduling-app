@@ -1,6 +1,6 @@
 package com.example.scheduler.backend
 
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.jackson.jackson
 import io.ktor.server.application.Application
@@ -24,6 +24,7 @@ import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.upperCase
 
 private val logger = KotlinLogging.logger {}
 private val dayRegex = Regex("(?i)(monday|tuesday|wednesday|thursday|friday|saturday|sunday)")
@@ -50,14 +51,10 @@ fun Application.module() {
                 return@post
             }
 
-            val activities = mutableListOf<Activity>()
-            payload.forEachIndexed { index, request ->
-                val result = request.toDomain(index)
-                if (result.error != null) {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("message" to result.error))
-                    return@post
+            val activities = payload.mapIndexedNotNull { index, request ->
+                request.toDomain(index) { message ->
+                    call.respond(HttpStatusCode.BadRequest, mapOf("message" to message))
                 }
-                result.activity?.let { activities.add(it) }
             }
 
             val inserted = insertActivities(activities)
@@ -101,25 +98,29 @@ fun Application.module() {
     }
 }
 
-private fun ActivityRequest.toDomain(index: Int): ActivityValidationResult {
-    val day = toDayOfWeek(dayOfWeek)
-        ?: return ActivityValidationResult(error = "Invalid dayOfWeek at index $index: $dayOfWeek")
+private fun ActivityRequest.toDomain(index: Int, onError: (String) -> Unit): Activity? {
+    val day = toDayOfWeek(dayOfWeek) ?: run {
+        onError("Invalid dayOfWeek at index $index: $dayOfWeek")
+        return null
+    }
 
-    val start = parseTime(startTime)
-        ?: return ActivityValidationResult(error = "Invalid startTime at index $index: $startTime")
+    val start = parseTime(startTime) ?: run {
+        onError("Invalid startTime at index $index: $startTime")
+        return null
+    }
 
-    val end = parseTime(endTime)
-        ?: return ActivityValidationResult(error = "Invalid endTime at index $index: $endTime")
+    val end = parseTime(endTime) ?: run {
+        onError("Invalid endTime at index $index: $endTime")
+        return null
+    }
 
-    return ActivityValidationResult(
-        activity = Activity(
-            title = title.trim(),
-            dayOfWeek = day,
-            startTime = start,
-            endTime = end,
-            location = location?.takeIf { it.isNotBlank() },
-            travelBufferMinutes = travelBufferMinutes ?: 0
-        )
+    return Activity(
+        title = title.trim(),
+        dayOfWeek = day,
+        startTime = start,
+        endTime = end,
+        location = location?.takeIf { it.isNotBlank() },
+        travelBufferMinutes = travelBufferMinutes ?: 0
     )
 }
 
@@ -151,7 +152,7 @@ private fun toDayOfWeek(raw: String?): DayOfWeek? = raw?.let {
     runCatching { DayOfWeek.valueOf(it.uppercase(Locale.getDefault())) }.getOrNull()
 }
 
-private fun Application.configurePlugins() {
+private fun configurePlugins() {
     install(CallLogging)
     install(ContentNegotiation) {
         jackson()
@@ -189,7 +190,7 @@ private fun insertActivities(activities: List<Activity>): Int {
 private object ActivitiesTable : Table("activities") {
     val id = integer("id").autoIncrement()
     val title = varchar("title", length = 255)
-    val dayOfWeek = varchar("dayOfWeek", length = 16)
+    val dayOfWeek = varchar("dayOfWeek", length = 16).upperCase()
     val startTime = varchar("startTime", length = 5)
     val endTime = varchar("endTime", length = 5)
     val location = varchar("location", length = 255).nullable()
@@ -223,11 +224,6 @@ private data class ActivityResponse(
     val endTime: String,
     val location: String?,
     val travelBufferMinutes: Int
-)
-
-private data class ActivityValidationResult(
-    val activity: Activity? = null,
-    val error: String? = null
 )
 
 private data class ParseActivitiesRequest(
@@ -267,7 +263,7 @@ private class NaturalLanguageParser {
 
         if (start == null || end == null) return null
 
-        val title = input.replace(dayRegex, "")
+        val title = input.replace(dayRegex, "", ignoreCase = true)
             .replace(timeRegex, "")
             .replace(travelRegex, "")
             .replace("-", " ")
@@ -278,9 +274,7 @@ private class NaturalLanguageParser {
         val travel = travelRegex.find(input)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
 
         return Activity(
-            title = title.replaceFirstChar { char ->
-                if (char.isLowerCase()) char.titlecase(Locale.getDefault()) else char.toString()
-            },
+            title = title.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() },
             dayOfWeek = day,
             startTime = start,
             endTime = end,
