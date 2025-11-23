@@ -55,9 +55,6 @@ android {
 // Starts the Ktor backend in the background before Android builds so developers
 // can interact with the app without manually launching the server.
 val backendProject = project(":backend:api")
-val backendInstallDir = backendProject.layout.buildDirectory.dir("install/api")
-val backendStartScript = backendInstallDir.map { it.file("bin/api").asFile }
-val backendStartScriptPath = backendStartScript.map { it.absolutePath.replace("\\", "/") }
 val skipBackendForLocalDev = providers.gradleProperty("skipBackendForLocalDev")
     .orElse(providers.environmentVariable("SKIP_BACKEND_FOR_LOCAL_DEV"))
     .map { it.toBoolean() }
@@ -77,19 +74,10 @@ tasks.register<Exec>("startBackendForLocalDev") {
         }
     }
 
-    doFirst {
-        // The command starts the generated installDist script in the background unless it is already running.
-        val startCommand = """
-            if pgrep -f 'com.example.scheduler.backend.ServerKt' > /dev/null; then
-              echo "Backend API already running on port 8080"
-            else
-              nohup "${backendStartScriptPath.get()}" >/tmp/backend-api.log 2>&1 &
-              echo "Started backend API (logs: /tmp/backend-api.log)"
-            fi
-        """.trimIndent().replace("\n", " ")
-
-        commandLine("bash", "-lc", startCommand)
-    }
+    commandLine(
+        "bash",
+        "tools/scripts/start_backend_for_local_dev.sh"
+    )
 }
 
 tasks.named("preBuild").configure {
