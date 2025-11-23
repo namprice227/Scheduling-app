@@ -21,11 +21,13 @@ import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.transactions.transaction
-import org.jetbrains.exposed.sql.upperCase
 
-private val dayRegex = Regex("(?i)(monday|tuesday|wednesday|thursday|friday|saturday|sunday)")
-private val timeRegex = Regex("(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?", RegexOption.IGNORE_CASE)
-private val travelRegex = Regex("travel\\s*(\\d{1,3})\\s*(m|min|minutes)?", RegexOption.IGNORE_CASE)
+private val dayRegex =
+    Regex("(?i)(monday|tuesday|wednesday|thursday|friday|saturday|sunday)")
+private val timeRegex =
+    Regex("(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?", RegexOption.IGNORE_CASE)
+private val travelRegex =
+    Regex("travel\\s*(\\d{1,3})\\s*(m|min|minutes)?", RegexOption.IGNORE_CASE)
 
 fun main() {
     embeddedServer(Netty, port = 8080) { module() }.start(wait = true)
@@ -34,53 +36,93 @@ fun main() {
 fun Application.module() {
     configurePlugins()
     configureDatabase()
-    routing {
-        post("/activities/bulk") {
-            val payload = runCatching { call.receive<List<ActivityRequest>>() }
-                .getOrElse {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("message" to "Invalid JSON payload"))
-                    return@post
-                }
 
-            if (payload.isEmpty()) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("message" to "Payload must not be empty"))
+    routing {
+
+        // --------- BULK CREATE ACTIVITIES ---------
+        post("/activities/bulk") {
+            val payload: List<ActivityRequest> = try {
+                call.receive()
+            } catch (e: Exception) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    mapOf("message" to "Invalid JSON payload")
+                )
                 return@post
             }
 
-            val activities = payload.mapIndexedNotNull { index, request ->
-                request.toDomain(index) { message ->
-                    call.respond(HttpStatusCode.BadRequest, mapOf("message" to message))
+            if (payload.isEmpty()) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    mapOf("message" to "Payload must not be empty")
+                )
+                return@post
+            }
+
+            val activities = mutableListOf<Activity>()
+
+            // Validate each item; if any is invalid, respond 400 and stop.
+            for ((index, request) in payload.withIndex()) {
+                val activity = request.toDomainOrNull()
+                if (activity == null) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        mapOf(
+                            "message" to
+                                    "Invalid payload at index $index " +
+                                    "(dayOfWeek='${request.dayOfWeek}', " +
+                                    "startTime='${request.startTime}', " +
+                                    "endTime='${request.endTime}')"
+                        )
+                    )
+                    return@post
                 }
+                activities += activity
             }
 
             val inserted = insertActivities(activities)
             call.respond(HttpStatusCode.Created, mapOf("inserted" to inserted))
         }
 
+        // --------- PARSE NATURAL LANGUAGE ACTIVITIES ---------
         post("/activities/parse") {
-            val request = runCatching { call.receive<ParseActivitiesRequest>() }
-                .getOrElse {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("message" to "Invalid JSON payload"))
-                    return@post
-                }
+            val request: ParseActivitiesRequest = try {
+                call.receive()
+            } catch (e: Exception) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    mapOf("message" to "Invalid JSON payload")
+                )
+                return@post
+            }
 
             val lines = request.lines?.filter { it.isNotBlank() } ?: emptyList()
             if (lines.isEmpty()) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("message" to "No activities provided"))
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    mapOf("message" to "No activities provided")
+                )
                 return@post
             }
 
             val parser = NaturalLanguageParser()
+
             val parsedResults = lines.mapIndexed { index, line ->
                 parser.parse(line)?.let { ParsedActivityResult(index, it) }
-                    ?: ParsedActivityResult(index, null, "Could not understand activity description")
+                    ?: ParsedActivityResult(
+                        index,
+                        null,
+                        "Could not understand activity description"
+                    )
             }
 
             val successful = parsedResults.mapNotNull { it.activity }
-            val errors = parsedResults.filter { it.error != null }
-                .map { ParsingError(index = it.index, message = it.error ?: "Unknown error") }
+            val errors = parsedResults
+                .filter { it.error != null }
+                .map { ParsingError(index = it.index, message = it.error!!) }
 
-            val inserted = if (request.persist != false) insertActivities(successful) else 0
+            val inserted =
+                if (request.persist != false) insertActivities(successful) else 0
 
             call.respond(
                 HttpStatusCode.OK,
@@ -94,103 +136,7 @@ fun Application.module() {
     }
 }
 
-private fun ActivityRequest.toDomain(index: Int, onError: (String) -> Unit): Activity? {
-    val day = toDayOfWeek(dayOfWeek) ?: run {
-        onError("Invalid dayOfWeek at index $index: $dayOfWeek")
-        return null
-    }
-
-    val start = parseTime(startTime) ?: run {
-        onError("Invalid startTime at index $index: $startTime")
-        return null
-    }
-
-    val end = parseTime(endTime) ?: run {
-        onError("Invalid endTime at index $index: $endTime")
-        return null
-    }
-
-    return Activity(
-        title = title.trim(),
-        dayOfWeek = day,
-        startTime = start,
-        endTime = end,
-        location = location?.takeIf { it.isNotBlank() },
-        travelBufferMinutes = travelBufferMinutes ?: 0
-    )
-}
-
-private fun Activity.toResponse(): ActivityResponse = ActivityResponse(
-    title = title,
-    dayOfWeek = dayOfWeek.name,
-    startTime = startTime.toString(),
-    endTime = endTime.toString(),
-    location = location,
-    travelBufferMinutes = travelBufferMinutes
-)
-
-private fun parseTime(raw: String?): LocalTime? {
-    val match = raw?.trim()?.let { token -> timeRegex.matchEntire(token) } ?: return null
-    val hour = match.groupValues.getOrNull(1)?.toIntOrNull() ?: return null
-    val minute = match.groupValues.getOrNull(2)?.takeIf { it.isNotBlank() }?.toIntOrNull() ?: 0
-    val suffix = match.groupValues.getOrNull(3)
-    val normalizedHour = when {
-        suffix.isNullOrBlank() -> hour
-        suffix.equals("am", ignoreCase = true) -> if (hour == 12) 0 else hour
-        suffix.equals("pm", ignoreCase = true) -> if (hour == 12) 12 else hour + 12
-        else -> hour
-    }
-    if (normalizedHour !in 0..23 || minute !in 0..59) return null
-    return LocalTime.of(normalizedHour, minute)
-}
-
-private fun toDayOfWeek(raw: String?): DayOfWeek? = raw?.let {
-    runCatching { DayOfWeek.valueOf(it.uppercase(Locale.getDefault())) }.getOrNull()
-}
-
-private fun configurePlugins() {
-    install(ContentNegotiation) {
-        jackson()
-    }
-}
-
-private fun configureDatabase() {
-    Database.connect("jdbc:sqlite:activities.db", driver = "org.sqlite.JDBC")
-    TransactionManager.defaultDatabase?.let { db ->
-        transaction(db) {
-            SchemaUtils.create(ActivitiesTable)
-        }
-    }
-}
-
-private fun insertActivities(activities: List<Activity>): Int {
-    if (activities.isEmpty()) return 0
-    return transaction {
-        activities.forEach { activity ->
-            ActivitiesTable.insert { row ->
-                row[title] = activity.title
-                row[dayOfWeek] = activity.dayOfWeek.name.uppercase()
-                row[startTime] = activity.startTime.toString()
-                row[endTime] = activity.endTime.toString()
-                row[location] = activity.location
-                row[travelBufferMinutes] = activity.travelBufferMinutes
-            }
-        }
-        activities.size
-    }
-}
-
-private object ActivitiesTable : Table("activities") {
-    val id = integer("id").autoIncrement()
-    val title = varchar("title", length = 255)
-    val dayOfWeek = varchar("dayOfWeek", length = 16).upperCase()
-    val startTime = varchar("startTime", length = 5)
-    val endTime = varchar("endTime", length = 5)
-    val location = varchar("location", length = 255).nullable()
-    val travelBufferMinutes = integer("travelBufferMinutes").default(0)
-
-    override val primaryKey = PrimaryKey(id)
-}
+// ---------- DOMAIN & DTOs ----------
 
 private data class ActivityRequest(
     val title: String,
@@ -241,9 +187,117 @@ private data class ParsedActivityResult(
     val error: String? = null
 )
 
+// Convert API request into domain model; return null if invalid.
+private fun ActivityRequest.toDomainOrNull(): Activity? {
+    val day = toDayOfWeek(dayOfWeek) ?: return null
+    val start = parseTime(startTime) ?: return null
+    val end = parseTime(endTime) ?: return null
+
+    return Activity(
+        title = title.trim(),
+        dayOfWeek = day,
+        startTime = start,
+        endTime = end,
+        location = location?.takeIf { it.isNotBlank() },
+        travelBufferMinutes = travelBufferMinutes ?: 0
+    )
+}
+
+private fun Activity.toResponse(): ActivityResponse =
+    ActivityResponse(
+        title = title,
+        dayOfWeek = dayOfWeek.name,          // e.g. "MONDAY"
+        startTime = startTime.toString(),    // "09:00"
+        endTime = endTime.toString(),        // "10:30"
+        location = location,
+        travelBufferMinutes = travelBufferMinutes
+    )
+
+// ---------- PARSING HELPERS ----------
+
+private fun parseTime(raw: String?): LocalTime? {
+    val match = raw?.trim()?.let { token -> timeRegex.matchEntire(token) } ?: return null
+
+    val hour = match.groupValues.getOrNull(1)?.toIntOrNull() ?: return null
+    val minute = match.groupValues.getOrNull(2)
+        ?.takeIf { it.isNotBlank() }
+        ?.toIntOrNull() ?: 0
+    val suffix = match.groupValues.getOrNull(3)
+
+    val normalizedHour = when {
+        suffix.isNullOrBlank() -> hour
+        suffix.equals("am", ignoreCase = true) -> if (hour == 12) 0 else hour
+        suffix.equals("pm", ignoreCase = true) -> if (hour == 12) 12 else hour + 12
+        else -> hour
+    }
+
+    if (normalizedHour !in 0..23 || minute !in 0..59) return null
+    return LocalTime.of(normalizedHour, minute)
+}
+
+private fun toDayOfWeek(raw: String?): DayOfWeek? =
+    raw?.let {
+        runCatching { DayOfWeek.valueOf(it.uppercase(Locale.getDefault())) }
+            .getOrNull()
+    }
+
+// ---------- KTOR & DB CONFIG ----------
+
+// Make this an extension on Application so install(...) is available
+private fun Application.configurePlugins() {
+    install(ContentNegotiation) {
+        jackson()
+    }
+}
+
+private fun configureDatabase() {
+    Database.connect("jdbc:sqlite:activities.db", driver = "org.sqlite.JDBC")
+    TransactionManager.defaultDatabase?.let { db ->
+        transaction(db) {
+            SchemaUtils.create(ActivitiesTable)
+        }
+    }
+}
+
+// Insert a batch of activities, return count.
+private fun insertActivities(activities: List<Activity>): Int {
+    if (activities.isEmpty()) return 0
+
+    return transaction {
+        activities.forEach { activity ->
+            ActivitiesTable.insert {
+                it[title] = activity.title
+                it[dayOfWeek] = activity.dayOfWeek.name      // already uppercase
+                it[startTime] = activity.startTime.toString()
+                it[endTime] = activity.endTime.toString()
+                it[location] = activity.location
+                it[travelBufferMinutes] = activity.travelBufferMinutes
+            }
+        }
+        activities.size
+    }
+}
+
+// ---------- EXPOSED TABLE ----------
+
+private object ActivitiesTable : Table("activities") {
+    val id = integer("id").autoIncrement()
+    val title = varchar("title", length = 255)
+    val dayOfWeek = varchar("dayOfWeek", length = 16)
+    val startTime = varchar("startTime", length = 5)
+    val endTime = varchar("endTime", length = 5)
+    val location = varchar("location", length = 255).nullable()
+    val travelBufferMinutes = integer("travelBufferMinutes").default(0)
+
+    override val primaryKey = PrimaryKey(id)
+}
+
+// ---------- NATURAL LANGUAGE PARSER ----------
+
 private class NaturalLanguageParser {
     fun parse(input: String): Activity? {
         val day = dayRegex.find(input)?.value?.let { toDayOfWeek(it) } ?: return null
+
         val times = timeRegex.findAll(input).toList()
         if (times.isEmpty()) return null
 
@@ -256,7 +310,8 @@ private class NaturalLanguageParser {
 
         if (start == null || end == null) return null
 
-        val title = input.replace(dayRegex, "", ignoreCase = true)
+        val rawTitle = input
+            .replace(dayRegex, "")        // regex already (?i)
             .replace(timeRegex, "")
             .replace(travelRegex, "")
             .replace("-", " ")
@@ -264,10 +319,17 @@ private class NaturalLanguageParser {
             .trim()
             .ifEmpty { "Task" }
 
-        val travel = travelRegex.find(input)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+        val title = rawTitle.replaceFirstChar {
+            if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
+        }
+
+        val travel = travelRegex.find(input)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.toIntOrNull() ?: 0
 
         return Activity(
-            title = title.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() },
+            title = title,
             dayOfWeek = day,
             startTime = start,
             endTime = end,
