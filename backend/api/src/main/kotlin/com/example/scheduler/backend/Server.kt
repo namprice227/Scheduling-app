@@ -71,7 +71,7 @@ private fun Application.configureRouting() {
             }
 
             val inserted = transaction {
-                normalized.sumOf { (request, dayValue) ->
+                normalized.forEach { (request, dayValue) ->
                     Activities.insert { row ->
                         row[title] = request.title
                         row[dayOfWeek] = dayValue
@@ -80,8 +80,8 @@ private fun Application.configureRouting() {
                         row[location] = request.location
                         row[travelBufferMinutes] = request.travelBufferMinutes ?: 0
                     }
-                    1
                 }
+                normalized.size
             }
 
             call.respond(HttpStatusCode.Created, BulkInsertResponse(inserted))
