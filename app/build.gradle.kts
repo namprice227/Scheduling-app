@@ -64,6 +64,16 @@ tasks.register<Exec>("startBackendForLocalDev") {
     description = "Starts the backend API if it is not already running."
     dependsOn(backendProject.tasks.named("installDist"))
 
+    onlyIf {
+        val shouldSkip = skipBackendForLocalDev.getOrElse(false)
+        if (shouldSkip) {
+            logger.lifecycle("Skipping backend startup (SKIP_BACKEND_FOR_LOCAL_DEV/skipBackendForLocalDev=true)")
+            false
+        } else {
+            true
+        }
+    }
+
     doFirst {
         // The command starts the generated installDist script in the background unless it is already running.
         val startCommand = """
